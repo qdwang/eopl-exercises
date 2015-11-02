@@ -14,3 +14,12 @@
       (if (= n 0)
           (car lst)
           (nth-element (cdr lst) (- n 1)))))
+
+(: remove-first (All (A) (-> A (Listof A) (Listof A))))
+(define (remove-first item lst)
+  (if (null? lst)
+      lst
+      (if (equal? item (car lst))
+          (cdr lst)
+          (cons (car lst) (remove-first item (cdr lst))))))
+
