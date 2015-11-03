@@ -64,7 +64,7 @@
 
 (: partial-vector-sum (-> (Vectorof Integer) Integer Integer))
 (define (partial-vector-sum vec n)
-  (if (or (null? vec) (zero? n))
+  (if (zero? n)
       (vector-ref vec n)
       (+ (vector-ref vec n) (partial-vector-sum vec (- n 1)))))
 
