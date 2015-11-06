@@ -18,8 +18,38 @@
           (apply-env (cast (list-ref env 2) Env) symbol))))
 
 
-(struct var-exp ([var : Symbol]))
-(struct lambda-exp ([bound-var : Symbol] [body : (U Null lc-exp)]))
-(struct app-exp ([rator : (U Null lc-exp)] [rand : (U Null lc-exp)]))
-(struct lc-exp ([var-exp : var-exp] [lambda-exp : lambda-exp] [app-exp : app-exp]))
-  
+(struct var-exp ([var : Any]))
+(struct lambda-exp ([bound-var : Symbol] [body : lc-exp]))
+(struct app-exp ([rator : lc-exp] [rand : lc-exp]))
+
+(define-type lc-exp (U var-exp lambda-exp app-exp Null))
+
+(: occurs-free (-> Any lc-exp Boolean))
+(define (occurs-free symbol exp)
+  (if (null? exp)
+      #f
+      (match exp
+        [(var-exp var) (if (equal? var symbol) #t #f)]
+        [(lambda-exp bound-var body)
+         (if (equal? bound-var symbol)
+             #f
+             (occurs-free symbol body))]
+        [(app-exp rator rand)
+         (or (occurs-free symbol rator)
+             (occurs-free symbol rand))])))
+
+(: parse-expression (-> (Rec exp (U Symbol Number (Listof exp))) lc-exp))
+(define (parse-expression datum)
+  (cond
+    [(symbol? datum) (var-exp datum)]
+    [(list? datum)
+     (if (equal? (car datum) 'lambda)
+         (lambda-exp
+          (car (cast (cadr datum) (Listof Symbol)))
+          (parse-expression (caddr datum)))
+         (app-exp (parse-expression (car datum)) (parse-expression (cadr datum))))]
+    [else null]))
+
+         
+         
+    
