@@ -26,7 +26,7 @@
 (struct proc-val ([var : Var] [body : Exp]))
 
 (define-type Exp
-  (U const-exp zero?-exp if-exp diff-exp var-exp let-exp proc-exp call-exp))
+  (U const-exp zero?-exp if-exp diff-exp var-exp let-exp proc-exp call-exp letrec-exp))
 (define-type Var Symbol)
 
 (struct const-exp ([const : Integer]))
@@ -37,6 +37,8 @@
 (struct let-exp ([var : Var] [expr : Exp] [body : Exp]))
 (struct proc-exp ([var : Var] [body : Exp]))
 (struct call-exp ([rator : Exp] [rand : Exp]))
+(struct letrec-exp
+  ([p-name : Var] [b-var : Var] [p-body : Exp] [letrec-body : Exp]))
 
 
 (: value-of (-> Exp Env ExpVal))
@@ -52,7 +54,7 @@
          (if (zero? (num-val-val inner-exp-val))
              (bool-val #t)
              (bool-val #f))
-         (error "zero-argument-error" inner-exp-val)))]
+         (error "zero-argument-error" inner-exp-val env)))]
     [(if-exp cond-exp then-exp else-exp)
      (let ([inner-exp-val (value-of cond-exp env)])
        (if (bool-val? inner-exp-val)
@@ -68,6 +70,8 @@
           (error "diff-arguments-error" inner-exp1-val inner-exp2-val)))]
     [(let-exp var exp1 body)
      (value-of body (extend-env var (value-of exp1 env) env))]
+    [(letrec-exp p-name b-var p-body letrec-body)
+     (value-of letrec-body (extend-env p-name (proc-val b-var p-body) env))]
     [(call-exp rator rand)
      (let ([proc (value-of rator env)])
        (if (proc-val? proc)
@@ -96,8 +100,25 @@
  (cast (value-of
   (let-exp
    'a
-   (proc-exp 'x (diff-exp (var-exp 'x) (const-exp 1)))
+   (proc-exp 'x
+             (if-exp (zero?-exp (var-exp 'x))
+                     (const-exp 0)
+                     (diff-exp (var-exp 'x) (const-exp 1))))
    (if-exp (zero?-exp (diff-exp (call-exp (var-exp 'a) (const-exp 5)) (const-exp 4)))
+           (const-exp 0)
+           (const-exp 1)))
+  (empty-env)) num-val))
+
+; for test 3
+(num-val-val
+ (cast (value-of
+  (letrec-exp
+   'foo
+   'x
+   (if-exp (zero?-exp (var-exp 'x))
+           (const-exp 0)
+           (call-exp (var-exp 'foo) (diff-exp (var-exp 'x) (const-exp 1))))
+   (if-exp (zero?-exp (call-exp (var-exp 'foo) (const-exp 5)))
            (const-exp 0)
            (const-exp 1)))
   (empty-env)) num-val))
