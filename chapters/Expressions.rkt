@@ -122,3 +122,10 @@
            (const-exp 0)
            (const-exp 1)))
   (empty-env)) num-val))
+
+; for test 4
+(num-val-val
+ (cast (value-of
+  (let-exp 'a (const-exp 5)
+   (diff-exp (let-exp 'a (const-exp 10) (var-exp 'a)) (var-exp 'a)))
+  (empty-env)) num-val))
