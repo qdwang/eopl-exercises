@@ -19,18 +19,20 @@
 
 (define-type Store (Listof ExpVal))
                     
-(define-type ExpVal (U num-val bool-val proc-val ref-val Null))
+(define-type ExpVal (U num-val bool-val proc-val ref-val lazy-val Null))
 
 ; expressed value
 (struct num-val ([val : Integer]))
 (struct bool-val ([val : Boolean]))
 (struct proc-val ([var : Var] [body : Exp]))
 (struct ref-val ([index : Integer]))
+(struct lazy-val ([body : Exp]))
                  
 (define-type Exp
   (U const-exp zero?-exp if-exp diff-exp
      var-exp let-exp proc-exp call-exp
-     letrec-exp newref-exp deref-exp setref-exp))
+     letrec-exp newref-exp deref-exp setref-exp
+     lazy-exp))
 
 (define-type Var Symbol)
 
@@ -47,6 +49,7 @@
 (struct newref-exp ([val : Exp]))
 (struct deref-exp ([var : Exp]))
 (struct setref-exp ([var : Exp] [val : Exp]))
+(struct lazy-exp ([exp : Exp]))
 
 (: list-update (All (A) (-> (Listof A) Integer A (Listof A))))
 (define (list-update lst index val)
@@ -56,11 +59,18 @@
 
 (: eval-program (-> Exp Env Store ExpVal))
 (define (eval-program expr env store)
+  
+  (: lazy->value (-> ExpVal Env ExpVal))
+  (define (lazy->value expval env)
+    (if (lazy-val? expval)
+        (value-of (lazy-val-body expval) env)
+        expval))
+  
   (: value-of (-> Exp Env ExpVal))
   (define (value-of expr env)
     (match expr
       [(const-exp const) (num-val const)]
-      [(var-exp var) (apply-env env var)]
+      [(var-exp var) (lazy->value (apply-env env var) env)]
       [(proc-exp var body) (proc-val var body)]
       
       [(newref-exp exp)
@@ -82,6 +92,9 @@
              (begin (set! store (list-update store (ref-val-index var) val))
                     var)
              (error "setref-argument-error" var val)))]
+
+      [(lazy-exp body)
+       (lazy-val body)]
       
       [(zero?-exp exp)
        (let ([inner-exp-val (value-of exp env)])
@@ -122,6 +135,7 @@
                (value-of rand env)
                env))
              (error "call-arguments-error" rator)))]))
+  
   (value-of expr env))
            
 (define test-store '())
@@ -176,5 +190,22 @@
 (num-val-val
  (cast (eval-program
   (let-exp 'a (newref-exp (const-exp 998))
-   (diff-exp (let-exp 'b (setref-exp (var-exp 'a) (const-exp 10)) (const-exp 10)) (deref-exp (var-exp 'a))))
+   (diff-exp (let-exp 'b (setref-exp (var-exp 'a) (const-exp 10)) (const-exp 10))
+             (deref-exp (var-exp 'a))))
+  (empty-env) test-store) num-val))
+
+; for test 6
+(num-val-val
+ (cast (eval-program
+  (letrec-exp 'loop 'x (call-exp (var-exp 'loop) (var-exp 'x))
+              (let-exp 'f (proc-exp 'z (const-exp 11))
+                       (call-exp (var-exp 'f) (lazy-exp (call-exp (var-exp 'loop) (const-exp 0))))))
+  (empty-env) test-store) num-val))
+
+; for test 7
+(num-val-val
+ (cast (eval-program
+  (letrec-exp 'loop 'x (const-exp 11)
+              (let-exp 'f (proc-exp 'z (diff-exp (const-exp 11) (var-exp 'z)))
+                       (call-exp (var-exp 'f) (lazy-exp (call-exp (var-exp 'loop) (const-exp 0))))))
   (empty-env) test-store) num-val))
