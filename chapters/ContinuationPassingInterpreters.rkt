@@ -75,16 +75,9 @@
 
 (: eval-program (-> Exp Env Store ExpVal))
 (define (eval-program expr env store)
-  
-  (: lazy->value (-> ExpVal Env Cont ExpVal))
-  (define (lazy->value expval env cont)
-    (if (lazy-val? expval)
-        (value-of (lazy-val-body expval) env cont)
-        expval))
 
   (: apply-cont (-> Cont ExpVal ExpVal))
   (define (apply-cont cont expval)
-    (begin (display cont) (display " -- ") (displayln expval) 
     (match cont
       [(zero-cont next-cont)
        (apply-cont next-cont (if (num-val? expval)
@@ -92,23 +85,28 @@
                  (bool-val #t)
                  (bool-val #f))
              (error "zero-argument-error" expval)))]
+      
       [(if-cont then-exp else-exp env next-cont)
        (if (bool-val? expval)
              (if (bool-val-val expval)
                  (value-of then-exp env next-cont)
                  (value-of else-exp env next-cont))
              (error "if-argument-error" expval))]
+      
       [(diff-arg1-cont expr2 env next-cont)
-       (begin (display " ~~ ")
-       (value-of expr2 env (diff-arg2-cont expval next-cont)))]
+       (value-of expr2 env (diff-arg2-cont expval next-cont))]
+      
       [(diff-arg2-cont expval1 next-cont)
-       (if (and (num-val? expval1) (num-val? expval))
+       (apply-cont next-cont (if (and (num-val? expval1) (num-val? expval))
              (num-val (- (num-val-val expval1) (num-val-val expval)))
-             (error "diff-arguments-error" expval1 expval))]
+             (error "diff-arguments-error" expval1 expval)))]
+      
       [(let-cont var body env next-cont)
        (value-of body (extend-env var expval env) next-cont)]
+      
       [(rator-cont rand env next-cont)
        (value-of rand env (rand-cont expval env next-cont))]
+      
       [(rand-cont rator env next-cont)
        (if (proc-val? rator)
              (value-of
@@ -118,29 +116,40 @@
                expval
                env) next-cont)
              (error "call-arguments-error" rator))]
+      
       [(newref-cont next-cont)
        (apply-cont next-cont (let ([store-len (length store)])
          (begin (set! store (append store (list expval)))
                 (ref-val store-len))))]
+      
       [(deref-cont next-cont)
        (apply-cont next-cont (if (ref-val? expval)
              (list-ref store (ref-val-index expval))
              (error "deref-argument-error" expval)))]
+      
       [(setref-var-cont val env next-cont)
        (value-of val env (setref-val-cont expval next-cont))]
+      
       [(setref-val-cont var next-cont)
        (apply-cont next-cont (if (ref-val? var)
              (begin (set! store (list-update store (ref-val-index var) expval))
                     var)
              (error "setref-argument-error" var expval)))]
-      [null expval])))
+      
+      [null expval]))
 
 
   (: value-of (-> Exp Env Cont ExpVal))
   (define (value-of expr env cont)
     (match expr
       [(const-exp const) (apply-cont cont (num-val const))]
-      [(var-exp var) (apply-cont cont (lazy->value (apply-env env var) env cont))]
+      
+      [(var-exp var)
+       (let ([expval (apply-env env var)])
+         (if (lazy-val? expval)
+                         (value-of (lazy-val-body expval) env cont)
+                         (apply-cont cont expval)))]
+      
       [(proc-exp var body) (apply-cont cont (proc-val var body))]
       
       [(newref-exp exp)
