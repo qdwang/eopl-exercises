@@ -1,38 +1,71 @@
 #lang typed/racket
 
-(define-type Exp (Rec exp (U Symbol Integer (Listof exp))))
+(define-type Exp (Rec exp (U Symbol Integer Null (Listof exp))))
 
+(: is-call? (-> Exp Boolean))
+(define (is-call? exp)
+  (if (list? exp)
+      (if (member (car exp) '(lambda if zero? + - * / K))
+          #f
+          #t)
+      #f))
 
+(: is-tail? (-> Exp Integer Boolean))
+(define (is-tail? exp position)
+  (match exp
+    [(list 'lambda _ _)
+     (if (= 2 position) #t #f)]
+    [(list 'if _ _ _)
+     (if (> 1 position) #t #f)]
+    [_
+     (if (= 0 position) #t #f)]))
 
-(: cps-convert (-> Exp Exp))
-(define (cps-convert input-exp)
+(: tail-cps (-> Exp Exp))
+(define (tail-cps exp)
+  (if (is-call? exp)
+      (append (cast exp (Listof Exp)) '(K))
+      `(K ,exp)))
 
-  (define [v-num : Integer] 0)
-    
-  (: cps-s (-> Exp Exp))
-  (define (cps-s input-exp)
-    (match input-exp
-      [x (quasiquote (cont (unquote input-exp)))]
-      
-      [('lambda args body)
-       (quasiquote (lambda (unquote (reverse (cons 'cont args))) (unquote (cps body))))]
-      
-      [('if cond-exp then-exp else-exp)
-       (quasiquote (if (unquote cond-exp) 
-                          
+(: inner-cps (-> Exp Exp))
+(define (inner-cps exp)
+  
+  (define v-num (cast 0 Integer))
+  (define prefix-exp '())
+  
+  (: _cps (-> Exp Exp))
+  (define (_cps exp)
+    (if (list? exp)
+        (let ([inner-lst (map (lambda (x) (_cps (cast x Exp))) exp)])
+          (begin '(print inner-lst) '(print (newline))
+          (if (is-call? inner-lst)
+              (begin (set! v-num (+ v-num 1))
+                     (let ([f-key (string->symbol (string-append "v" (number->string v-num)))])
+                       (begin (set! prefix-exp `(,prefix-exp ,inner-lst (lambda (,f-key) )))
+                              f-key)))
+              inner-lst)))
+        exp))
+  (let ([base-exp (_cps exp)])
+    (begin (print prefix-exp)
+           base-exp)))
+           
+  
 
 
 
 ; for test
-(define test-exp1
-'(lambda (x)
-  (if (zero? x)
-      (+ a (f b) 5 6)
-      (f c))))
+(define test-a
+  '(+ 22 (- x 3) x))
 
-;to
-;empty cont will be (lambda (x) x)
-'(lambda (x cont)
-  (if (zero? x)
-      ((f b) (lambda (v1) (cont (+ a v1 5 6)))) 
-      (f c cont)))
+(define test-b
+  '(+ 22 (f x) 37))
+
+(define test-c
+  '(g 22 (f x)))
+
+(define test-d
+  '(+ 22 (f (g x)) 33 (g y)))
+
+(inner-cps (tail-cps test-a))
+(inner-cps (tail-cps test-b))
+(inner-cps (tail-cps test-c))
+(inner-cps (tail-cps test-d))
